@@ -38,66 +38,123 @@ def set_custom_prompt(custom_prompt_template):
         logger.error(f"Error setting prompt: {str(e)}")
         raise
 
+# Custom CSS for professional styling
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #E6F3E6; /* Light green background */
+        /* Uncomment the line below and comment the above for light yellow: */
+        /* background-color: #FFF9E6; */
+        padding: 20px;
+    }
+    .title-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .title-image {
+        margin-right: 20px;
+        max-width: 200px;
+    }
+    .chat-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .stChatMessage {
+        padding: 10px;
+        border-radius: 5px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 def main():
-    st.title("Ask Chatbot!")
+    # Sidebar for additional options (optional, can be expanded)
+    st.sidebar.title("MediBot Settings")
+    st.sidebar.write("Configure your chatbot experience here.")
+
+    # Title and image
+    st.markdown(
+        '<div class="title-container">'
+        '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==" class="title-image" alt="MediBot Header">'
+        '<h1 style="color: #1E90FF;">MediBot: AI Medical Chatbot using RAG</h1>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+    # Note: Replace the base64 placeholder with the actual image data if needed.
+    # For now, assume the image is saved as 'header_image.png' in the project directory.
+    # Use st.image() instead if the image is a file:
+    st.image("medibot.png", width=200, caption="MediBot Interface")
 
     if 'messages' not in st.session_state:
         st.session_state.messages = []
 
-    for message in st.session_state.messages:
-        st.chat_message(message['role']).markdown(message['content'])
+    # Chat container for a professional look
+    with st.container():
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        for message in st.session_state.messages:
+            with st.chat_message(message['role']):
+                st.markdown(message['content'])
 
-    prompt = st.chat_input("Pass your prompt here")
+        prompt = st.chat_input("Ask a medical question...")
 
-    if prompt:
-        st.chat_message('user').markdown(prompt)
-        st.session_state.messages.append({'role': 'user', 'content': prompt})
+        if prompt:
+            with st.chat_message('user'):
+                st.markdown(prompt)
+            st.session_state.messages.append({'role': 'user', 'content': prompt})
 
-        CUSTOM_PROMPT_TEMPLATE = """
-                Use the pieces of information provided in the context to answer user's question.
-                If you dont know the answer, just say that you dont know, dont try to make up an answer. 
-                Dont provide anything out of the given context
+            CUSTOM_PROMPT_TEMPLATE = """
+                    Use the pieces of information provided in the context to answer user's question.
+                    If you dont know the answer, just say that you dont know, dont try to make up an answer. 
+                    Dont provide anything out of the given context
 
-                Context: {context}
-                Question: {question}
+                    Context: {context}
+                    Question: {question}
 
-                Start the answer directly. No small talk please.
-                """
-        
-        # TODO: Create a Groq API key and add it to .env file
-        
-        try: 
-            logger.info("Retrieving vector store")
-            vectorstore = get_vectorstore()
-            if vectorstore is None:
-                st.error("Failed to load the vector store")
-                return
+                    Start the answer directly. No small talk please.
+                    """
+            
+            try: 
+                logger.info("Retrieving vector store")
+                vectorstore = get_vectorstore()
+                if vectorstore is None:
+                    st.error("Failed to load the vector store")
+                    return
 
-            logger.info("Creating RetrievalQA chain")
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=ChatGroq(
-                    model_name="meta-llama/llama-4-maverick-17b-128e-instruct",  # free, fast Groq-hosted model
-                    temperature=0.0,
-                    groq_api_key=os.environ["GROQ_API_KEY"],
-                ),
-                chain_type="stuff",
-                retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
-                return_source_documents=True,
-                chain_type_kwargs={'prompt': set_custom_prompt(CUSTOM_PROMPT_TEMPLATE)}
-            )
+                logger.info("Creating RetrievalQA chain")
+                qa_chain = RetrievalQA.from_chain_type(
+                    llm=ChatGroq(
+                        model_name="meta-llama/llama-4-maverick-17b-128e-instruct",
+                        temperature=0.0,
+                        groq_api_key=os.environ["GROQ_API_KEY"],
+                    ),
+                    chain_type="stuff",
+                    retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
+                    return_source_documents=True,
+                    chain_type_kwargs={'prompt': set_custom_prompt(CUSTOM_PROMPT_TEMPLATE)}
+                )
 
-            logger.info(f"Processing query: {prompt}")
-            response = qa_chain.invoke({'query': prompt})
+                logger.info(f"Processing query: {prompt}")
+                response = qa_chain.invoke({'query': prompt})
 
-            result = response["result"]
-            source_documents = response["source_documents"]
-            result_to_show = result + "\nSource Docs:\n" + str(source_documents)
-            st.chat_message('assistant').markdown(result_to_show)
-            st.session_state.messages.append({'role': 'assistant', 'content': result_to_show})
+                result = response["result"]
+                source_documents = response["source_documents"]
+                result_to_show = result + "\n**Source Docs:**\n" + str(source_documents)
+                with st.chat_message('assistant'):
+                    st.markdown(result_to_show)
+                st.session_state.messages.append({'role': 'assistant', 'content': result_to_show})
 
-        except Exception as e:
-            logger.error(f"Error in main processing: {str(e)}")
-            st.error(f"Error: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error in main processing: {str(e)}")
+                st.error(f"Error: {str(e)}")
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
